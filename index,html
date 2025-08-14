@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passômetro Digital - UPA José Belchior</title>
+    
+    <!-- Tailwind CSS: Framework para estilização rápida e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- SheetJS (xlsx): Biblioteca para criar e exportar arquivos Excel (.xlsx) diretamente do navegador -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- Firebase SDK (Software Development Kit): Conjunto de ferramentas para interagir com os serviços do Firebase -->
+    <!-- Usamos a versão 'compat' para manter a sintaxe mais antiga que você estava utilizando -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    
+    <!-- Font Awesome: Biblioteca de ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" xintegrity="sha512-KfkfwYDsLkIlwQp6LFnl8zNdLGxu9YAA1QvwINks4PhcElQSvqcyVLLD9aMhXd13uQjoXtEKNosOWaZqXgel0g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <!-- Configuração personalizada do Tailwind CSS para estender o tema padrão com nossas cores -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#3b82f6',
+                        accent: '#06b6d4',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Estilos CSS personalizados para efeitos visuais e animações -->
+    <style>
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); }
+        .tab-active { background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; }
+        .modal-backdrop { backdrop-filter: blur(4px); }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .pulse-warning { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- TELA DE LOGIN: Visível apenas quando o usuário não está autenticado -->
+    <div id="login-container" class="flex items-center justify-center min-h-screen p-4">
+        <div class="w-full max-w-sm p-8 space-y-6 bg-white rounded-xl shadow-lg">
+            <div class="text-center">
+                <h1 class="text-3xl font-bold text-primary">Acesso Restrito</h1>
+                <p class="text-slate-500 mt-2">Faça login para acessar o Passômetro.</p>
+            </div>
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+                    <input type="email" id="email" required class="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-slate-700 mb-1">Senha</label>
+                    <input type="password" id="password" required class="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                </div>
+                <button type="submit" class="w-full py-3 font-semibold text-white bg-primary rounded-lg hover:bg-blue-800 transition duration-300">
+                    Entrar
+                </button>
+            </form>
+            <p id="login-error" class="text-red-500 text-center font-medium hidden"></p>
+        </div>
+    </div>
+
+    <!-- CONTAINER PRINCIPAL DA APLICAÇÃO: Visível apenas após o login -->
+    <div id="app-container" class="hidden">
+        <header class="bg-white shadow-lg border-b-4 border-primary">
+            <div class="container mx-auto px-4 py-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-800">Passômetro Digital</h1>
+                        <p class="text-gray-600 mt-1">UPA José Belchior - Gestão de Plantão</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="openReportModal()" class="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            Exportar Relatório em XLS
+                        </button>
+                        <button onclick="openNewPendencyModal()" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Nova Pendência
+                        </button>
+                        <button onclick="logout()" class="bg-danger text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
+                            Sair
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Container para exibir notificações (sucesso, erro, etc.) -->
+        <div id="alertsContainer" class="container mx-auto px-4 pt-4"></div>
+
+        <main class="container mx-auto px-4 py-8">
+            <!-- PAINEL DE RESUMO (VISÍVEL EM DESKTOPS) -->
+            <div class="bg-white rounded-lg shadow-md mb-6">
+                <div class="hidden md:block p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">Resumo do Plantão</h2>
+                    <div class="grid grid-cols-4 gap-4">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-blue-600" id="totalPendencias">0</div>
+                            <div class="text-sm text-gray-600">Pendências Ativas</div>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-green-600" id="totalAceitas">0</div>
+                            <div class="text-sm text-gray-600">Aceitas Hoje</div>
+                        </div>
+                        <div class="bg-yellow-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-yellow-600" id="tempoMedio">--</div>
+                            <div class="text-sm text-gray-600">Tempo Médio</div>
+                        </div>
+                        <div class="bg-red-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-red-600" id="pendenciasUrgentes">0</div>
+                            <div class="text-sm text-gray-600">Urgentes (>4h)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAINEL DE RESUMO (VERSÃO MOBILE, EXPANSÍVEL) -->
+                <div class="md:hidden">
+                    <button onclick="toggleSummaryDropdown()" class="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors" id="summaryToggle">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-primary p-2 rounded-lg">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-bold text-gray-800">Resumo do Plantão</h2>
+                                <div class="text-sm text-gray-600">
+                                    <span id="mobileSummaryText">0 ativas • 0 aceitas • 0 urgentes</span>
+                                </div>
+                            </div>
+                        </div>
+                        <svg class="w-5 h-5 text-gray-400 transform transition-transform" id="summaryChevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div class="hidden border-t border-gray-200" id="summaryDropdown">
+                        <div class="p-4 space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                    <span class="text-sm font-medium text-gray-700">Pendências Ativas</span>
+                                </div>
+                                <span class="text-lg font-bold text-blue-600" id="totalPendenciasMobile">0</span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    <span class="text-sm font-medium text-gray-700">Aceitas Hoje</span>
+                                </div>
+                                <span class="text-lg font-bold text-green-600" id="totalAceitasMobile">0</span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                    <span class="text-sm font-medium text-gray-700">Tempo Médio</span>
+                                </div>
+                                <span class="text-lg font-bold text-yellow-600" id="tempoMedioMobile">--</span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                    <span class="text-sm font-medium text-gray-700">Urgentes (>4h)</span>
+                                </div>
+                                <span class="text-lg font-bold text-red-600" id="pendenciasUrgentesMobile">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABAS DE NAVEGAÇÃO DOS CONSULTÓRIOS -->
+            <div class="bg-white rounded-lg shadow-md mb-6">
+                <div class="flex flex-wrap border-b" id="consultorioTabs">
+                    <!-- As abas serão geradas dinamicamente via JavaScript -->
+                </div>
+            </div>
+
+            <!-- CONTAINER PARA OS CARDS DE PENDÊNCIAS -->
+            <div class="grid gap-6" id="pendenciasContainer">
+                <!-- Os cards de pendência serão gerados dinamicamente via JavaScript -->
+            </div>
+
+            <!-- MENSAGEM DE ESTADO VAZIO: Exibida quando não há pendências na aba selecionada -->
+            <div id="emptyState" class="text-center py-12 hidden">
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <h3 class="text-lg font-medium text-gray-600 mb-2">Nenhuma pendência encontrada</h3>
+                <p class="text-gray-500">Não há pendências ativas para este consultório no momento.</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL: ADICIONAR NOVA PENDÊNCIA -->
+    <div id="newPendencyModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">Nova Pendência</h2>
+                    <button onclick="closeNewPendencyModal()" class="text-gray-400 hover:text-gray-600">&times;</button>
+                </div>
+                <form id="newPendencyForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Consultório de Destino *</label>
+                        <select id="consultorioDestino" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Nome do Paciente *</label>
+                        <input type="text" id="nomePaciente" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Digite o nome do paciente">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Motivo da Pendência *</label>
+                        <input type="text" id="motivoPendencia" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Ex: Aguardando resultado de exame">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Resumo Clínico *</label>
+                        <textarea id="resumoClinico" required rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Descrição detalhada do caso"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Prioridade</label>
+                        <select id="prioridadePendencia" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="normal">Normal</option>
+                            <option value="alta">Alta</option>
+                            <option value="urgente">Urgente</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-3 pt-4">
+                        <button type="button" onclick="closeNewPendencyModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+                        <button type="submit" class="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2" id="saveBtn"><span>Salvar Pendência</span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ACEITAR PENDÊNCIA -->
+    <div id="acceptPendencyModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">Aceitar Pendência</h2>
+                    <button onclick="closeAcceptPendencyModal()" class="text-gray-400 hover:text-gray-600">&times;</button>
+                </div>
+                <form id="acceptPendencyForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Seu Nome (Médico que assume) *</label>
+                        <input type="text" id="medicoAceite" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Digite seu nome">
+                    </div>
+                    <div class="flex gap-3 pt-4">
+                        <button type="button" onclick="closeAcceptPendencyModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+                        <button type="submit" class="flex-1 px-4 py-2 bg-success text-white rounded-lg hover:bg-green-600 flex items-center justify-center gap-2" id="acceptBtn"><span>Aceitar Demanda</span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXPORTAR RELATÓRIO -->
+    <div id="reportModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">Exportar Relatório por Consultório</h2>
+                    <button onclick="closeReportModal()" class="text-gray-400 hover:text-gray-600">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label for="consultorioSelectExport" class="block text-sm font-medium text-gray-700 mb-2">Selecione o consultório para exportar:</label>
+                        <select id="consultorioSelectExport" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        </select>
+                    </div>
+                    <div class="flex gap-3 pt-4">
+                        <button type="button" onclick="closeReportModal()" class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+                        <button type="button" onclick="exportConsultorioReport()" class="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700">Gerar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="text-center py-6 text-sm text-slate-500">
+        <div class="mb-4">
+            <p class="italic text-slate-600">"Cure às vezes, trate com frequência, conforte sempre."</p>
+            <p class="text-slate-400 mt-1">- Hipócrates -</p>
+        </div>
+        <p>Desenvolvido voluntariamente por <a href="https://wa.me/5535999706921?text=Quero%20saber%20mais%20sobre%20seus%20servi%C3%A7os" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">JM Analytics</a></p>
+    </footer>
+
+    <script>
+        // Usamos uma IIFE (Immediately Invoked Function Expression) para criar um escopo privado.
+        // Isso evita que nossas variáveis e funções "vazem" para o escopo global (window),
+        // prevenindo conflitos com outras bibliotecas ou scripts.
+        (function() {
+            // =================================================================================
+            // PASSO 1: CONFIGURAÇÃO DO FIREBASE
+            //
+            // ATENÇÃO, ESTAGIÁRIO: NUNCA, JAMAIS, EM HIPÓTESE ALGUMA, PUBLIQUE ESTAS CHAVES
+            // EM UM REPOSITÓRIO PÚBLICO (COMO O GITHUB).
+            //
+            // Por quê? Porque estas chaves dão acesso total ao seu projeto Firebase.
+            // Qualquer pessoa com acesso a elas pode ler, escrever, apagar seus dados e
+            // até mesmo gerar custos altíssimos em sua conta.
+            //
+            // Solução Segura:
+            // 1. Ambiente de Desenvolvimento (local): Você pode usar as chaves aqui para testar.
+            // 2. Ambiente de Produção (online): As chaves devem ser armazenadas como
+            //    "Environment Variables" (Variáveis de Ambiente) no seu serviço de hospedagem
+            //    (Vercel, Netlify, etc.). O código então leria essas variáveis do ambiente,
+            //    sem que elas precisem estar escritas diretamente no código.
+            //
+            // Para este arquivo, substituímos as chaves por placeholders (textos de exemplo).
+            // Você deve substituí-los pelas suas chaves reais APENAS no seu ambiente local.
+            // =================================================================================
+            const firebaseConfig = {
+                apiKey: "SUA_API_KEY_AQUI",
+                authDomain: "SEU_AUTH_DOMAIN_AQUI",
+                projectId: "SEU_PROJECT_ID_AQUI",
+                storageBucket: "SEU_STORAGE_BUCKET_AQUI",
+                messagingSenderId: "SEU_MESSAGING_SENDER_ID_AQUI",
+                appId: "SEU_APP_ID_AQUI"
+            };
+            
+            // =================================================================================
+            // PASSO 2: VARIÁVEIS GLOBAIS DA APLICAÇÃO
+            //
+            // Aqui declaramos variáveis que precisarão ser acessadas em várias partes do nosso script.
+            // =================================================================================
+            let db; // Armazenará a instância do Firestore (nosso banco de dados).
+            let auth; // Armazenará a instância do Firebase Auth (nosso sistema de autenticação).
+            
+            let currentTab = 'Consultório 1 (Adulto)'; // Guarda qual aba de consultório está ativa.
+            let currentPendencyId = null; // Guarda o ID da pendência que está sendo aceita no momento.
+            
+            // Variáveis para guardar os "listeners" (ouvintes) do Firebase.
+            // Listeners são conexões em tempo real que nos notificam sobre qualquer mudança no banco de dados.
+            // Precisamos guardá-los para poder "desligá-los" quando o usuário fizer logout.
+            let pendenciasUnsubscribe = null;
+            let historicoUnsubscribe = null;
+            
+            // Arrays para armazenar todos os dados vindos do banco.
+            // Em vez de consultar o banco a cada clique, carregamos tudo na memória e filtramos
+            // conforme o necessário. Isso torna a interface muito mais rápida.
+            let allPendencias = [];
+            let allHistorico = [];
+            
+            // Lista fixa de consultórios. Poderia vir do banco de dados, mas para este caso, uma lista fixa é suficiente.
+            const consultorios = ["Consultório 1 (Adulto)", "Consultório 2 (Adulto)", "Consultório 3 (Adulto)", "Consultório 4 (Adulto)", "Consultório 1 (Pediatria)", "Consultório 2 (Pediatria)", "Sala Vermelha"];
+
+            // =================================================================================
+            // PASSO 3: INICIALIZAÇÃO DA APLICAÇÃO
+            //
+            // O evento 'DOMContentLoaded' é disparado pelo navegador quando toda a estrutura HTML
+            // da página foi carregada. É o momento seguro para começar a manipular o DOM
+            // e inicializar nossas bibliotecas.
+            // =================================================================================
+            document.addEventListener('DOMContentLoaded', function() {
+                // Inicializa o Firebase com as nossas credenciais.
+                firebase.initializeApp(firebaseConfig);
+                
+                // Pega as instâncias dos serviços que vamos usar.
+                db = firebase.firestore(); // Banco de dados
+                auth = firebase.auth(); // Autenticação
+
+                // Adiciona um "ouvinte" ao formulário de login para chamar a função handleLogin quando for submetido.
+                document.getElementById('login-form').addEventListener('submit', handleLogin);
+                
+                // A MÁGICA DA AUTENTICAÇÃO: onAuthStateChanged
+                // Este é um listener do Firebase Auth. Ele é chamado automaticamente:
+                // 1. Quando a página carrega, para verificar se o usuário já está logado.
+                // 2. Quando o usuário faz login com sucesso.
+                // 3. Quando o usuário faz logout.
+                // É a forma mais eficiente de controlar o estado de login/logout da aplicação.
+                auth.onAuthStateChanged(user => {
+                    if (user) {
+                        // Se existe um 'user', ele está logado!
+                        // Escondemos a tela de login e mostramos o conteúdo principal da aplicação.
+                        document.getElementById('login-container').classList.add('hidden');
+                        document.getElementById('app-container').classList.remove('hidden');
+                        
+                        // Funções para configurar a interface e iniciar a comunicação com o banco de dados.
+                        setupUI();
+                        setupAppEventListeners();
+                        startRealtimeListeners();
+                    } else {
+                        // Se 'user' é nulo, ele não está logado.
+                        // Mostramos a tela de login e escondemos a aplicação.
+                        document.getElementById('login-container').classList.remove('hidden');
+                        document.getElementById('app-container').classList.add('hidden');
+                        
+                        // IMPORTANTE: Se o usuário deslogou, devemos parar de "ouvir" o banco de dados
+                        // para economizar recursos e evitar erros.
+                        if (pendenciasUnsubscribe) pendenciasUnsubscribe();
+                        if (historicoUnsubscribe) historicoUnsubscribe();
+                    }
+                });
+            });
+
+            // =================================================================================
+            // PASSO 4: FUNÇÕES DE COMUNICAÇÃO COM O FIREBASE (CORE)
+            // =================================================================================
+
+            /**
+             * Inicia os listeners em tempo real para as coleções 'pendencias' e 'historico'.
+             * O 'onSnapshot' é o coração da aplicação real-time. Toda vez que um documento
+             * for adicionado, modificado ou removido na coleção, esta função será chamada
+             * automaticamente com os dados atualizados.
+             */
+            function startRealtimeListeners() {
+                // Garante que não haja listeners duplicados rodando.
+                if (pendenciasUnsubscribe) pendenciasUnsubscribe();
+                pendenciasUnsubscribe = db.collection('pendencias').onSnapshot(snapshot => {
+                    // Mapeia os documentos recebidos para um array de objetos, adicionando o ID do documento.
+                    allPendencias = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Atualiza a interface com os novos dados.
+                    refreshUIWithData(allPendencias, allHistorico);
+                }, error => console.error("Erro no listener de pendências:", error));
+
+                // Faz o mesmo para a coleção 'historico'.
+                if (historicoUnsubscribe) historicoUnsubscribe();
+                historicoUnsubscribe = db.collection('historico').onSnapshot(snapshot => {
+                    allHistorico = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    refreshUIWithData(allPendencias, allHistorico);
+                }, error => console.error("Erro no listener de histórico:", error));
+            }
+
+            /**
+             * Salva uma nova pendência no banco de dados.
+             * @param {Event} event - O evento de submit do formulário.
+             */
+            function savePendency(event) {
+                event.preventDefault(); // Impede o recarregamento padrão da página ao submeter o formulário.
+                
+                const user = auth.currentUser; // Pega o usuário atualmente logado.
+                
+                // Cria um objeto 'pendencia' com os dados dos campos do formulário.
+                const pendencia = {
+                    consultorio: document.getElementById('consultorioDestino').value,
+                    nomePaciente: document.getElementById('nomePaciente').value,
+                    motivoPendencia: document.getElementById('motivoPendencia').value,
+                    resumoClinico: document.getElementById('resumoClinico').value,
+                    prioridade: document.getElementById('prioridadePendencia').value,
+                    medicoSaida: user.displayName || user.email, // Usa o nome de exibição do usuário ou o email.
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(), // Pega a data/hora do servidor do Firebase.
+                };
+                
+                // Adiciona o novo objeto à coleção 'pendencias'.
+                db.collection('pendencias').add(pendencia).then(() => {
+                    showNotification('Pendência salva com sucesso!', 'success');
+                    closeNewPendencyModal();
+                }).catch(e => {
+                    console.error("Erro ao salvar:", e);
+                    showNotification('Erro ao salvar pendência.', 'danger');
+                });
+            }
+            
+            /**
+             * Aceita uma pendência. Isso envolve:
+             * 1. Ler a pendência da coleção 'pendencias'.
+             * 2. Criar uma cópia dela na coleção 'historico' com informações adicionais (quem aceitou, quando).
+             * 3. Apagar a pendência original da coleção 'pendencias'.
+             * Este processo é "assíncrono", por isso a palavra 'async'.
+             */
+            async function confirmAcceptPendency() {
+                const user = auth.currentUser;
+                const medicoAceite = document.getElementById('medicoAceite').value || (user.displayName || user.email);
+                
+                if (!medicoAceite) {
+                    showNotification('Por favor, digite seu nome.', 'warning');
+                    return;
+                }
+                
+                // Cria uma referência para o documento da pendência que queremos mover.
+                const pendenciaRef = db.collection('pendencias').doc(currentPendencyId);
+                const pendenciaDoc = await pendenciaRef.get(); // 'await' pausa a função até o dado ser lido.
+                
+                if (!pendenciaDoc.exists) return; // Se a pendência não existe mais, não faz nada.
+
+                // Cria o objeto para o histórico, copiando os dados da pendência original
+                // e adicionando os novos campos.
+                const historicoItem = { 
+                    ...pendenciaDoc.data(), // '...' (spread operator) copia todos os campos do objeto.
+                    status: 'aceita', 
+                    medicoAceite, 
+                    dataAceite: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                // Executa as duas operações: adicionar ao histórico e deletar da pendência.
+                await db.collection('historico').add(historicoItem);
+                await pendenciaRef.delete();
+                
+                showNotification('Pendência aceita e movida para o histórico!', 'success');
+                closeAcceptPendencyModal();
+            }
+            
+            /**
+             * Lida com a tentativa de login do usuário.
+             * @param {Event} event - O evento de submit do formulário de login.
+             */
+            function handleLogin(event) {
+                event.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const errorEl = document.getElementById('login-error');
+                errorEl.classList.add('hidden'); // Esconde mensagens de erro antigas.
+                
+                // Tenta fazer o login com o Firebase Auth.
+                auth.signInWithEmailAndPassword(email, password)
+                    .catch(error => {
+                        // Se der erro (email/senha errados), mostra a mensagem de erro.
+                        errorEl.textContent = "E-mail ou senha inválidos.";
+                        errorEl.classList.remove('hidden');
+                    });
+            }
+
+            /**
+             * Desloga o usuário.
+             */
+            function logout() {
+                auth.signOut();
+            }
+            
+            // =================================================================================
+            // PASSO 5: FUNÇÕES DE MANIPULAÇÃO DA INTERFACE (UI)
+            // =================================================================================
+            
+            /**
+             * Função central que atualiza toda a interface com base nos dados mais recentes.
+             * @param {Array} pendencias - Array de pendências ativas.
+             * @param {Array} historico - Array de pendências concluídas.
+             */
+            function refreshUIWithData(pendencias, historico) {
+                renderPendencias(pendencias);
+                updateSummary(pendencias, historico);
+            }
+
+            /**
+             * Configura elementos da UI que só precisam ser montados uma vez, como os selects.
+             */
+            function setupUI() {
+                const select = document.getElementById('consultorioDestino');
+                select.innerHTML = ''; // Limpa opções antigas.
+                consultorios.forEach(c => {
+                    const option = document.createElement('option');
+                    option.value = c;
+                    option.textContent = c;
+                    select.appendChild(option);
+                });
+            }
+
+            /**
+             * Configura os event listeners da aplicação principal (formulários, abas, etc.).
+             */
+            function setupAppEventListeners() {
+                document.getElementById('newPendencyForm').addEventListener('submit', savePendency);
+                document.getElementById('acceptPendencyForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    confirmAcceptPendency();
+                });
+                
+                // Cria dinamicamente os botões das abas dos consultórios.
+                const tabsContainer = document.getElementById('consultorioTabs');
+                tabsContainer.innerHTML = '';
+                consultorios.forEach(c => {
+                    const button = document.createElement('button');
+                    button.className = 'tab-button px-6 py-4 font-medium text-sm rounded-t-lg transition-colors flex items-center justify-center gap-2';
+                    button.dataset.tab = c; // 'data-tab' é usado para identificar qual consultório o botão representa.
+
+                    let iconHtml = '';
+                    if (c.includes('Adulto')) {
+                        iconHtml = '<i class="fa-solid fa-stethoscope w-5 h-5"></i>';
+                    } else if (c.includes('Pediatria')) {
+                        iconHtml = '<i class="fa-solid fa-child w-5 h-5"></i>';
+                    } else if (c === 'Sala Vermelha') {
+                        iconHtml = '<i class="fa-solid fa-triangle-exclamation w-5 h-5"></i>';
+                    }
+
+                    button.innerHTML = `${iconHtml}<span>${c}</span>`;
+
+                    // Aplica estilos diferentes para a Sala Vermelha.
+                    if (c === 'Sala Vermelha') {
+                        button.classList.add('text-red-600', 'hover:bg-red-50');
+                    } else {
+                        button.classList.add('text-gray-600', 'hover:text-primary');
+                    }
+
+                    // Marca a aba inicial como ativa.
+                    if (c === currentTab) {
+                        if (c === 'Sala Vermelha') {
+                            button.classList.add('bg-danger', 'text-white');
+                            button.classList.remove('text-red-600', 'hover:bg-red-50');
+                        } else {
+                            button.classList.add('tab-active');
+                            button.classList.remove('text-gray-600', 'hover:text-primary');
+                        }
+                    }
+
+                    button.addEventListener('click', () => switchTab(c));
+                    tabsContainer.appendChild(button);
+                });
+            }
+            
+            /**
+             * Troca a aba ativa, atualizando os estilos e renderizando as pendências corretas.
+             * @param {string} tabId - O nome do consultório da aba clicada.
+             */
+            function switchTab(tabId) {
+                currentTab = tabId; // Atualiza a variável global.
+                
+                // Itera sobre todos os botões de aba para atualizar seus estilos.
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('tab-active', 'bg-danger', 'text-white');
+                    // Reseta o estilo padrão.
+                    if (btn.dataset.tab === 'Sala Vermelha') {
+                        btn.classList.add('text-red-600', 'hover:bg-red-50');
+                    } else {
+                        btn.classList.add('text-gray-600', 'hover:text-primary');
+                    }
+
+                    // Aplica o estilo de 'ativo' apenas no botão que foi clicado.
+                    if (btn.dataset.tab === tabId) {
+                        if (tabId === 'Sala Vermelha') {
+                            btn.classList.remove('text-red-600', 'hover:bg-red-50');
+                            btn.classList.add('bg-danger', 'text-white');
+                        } else {
+                            btn.classList.remove('text-gray-600', 'hover:text-primary');
+                            btn.classList.add('tab-active');
+                        }
+                    }
+                });
+                
+                // Renderiza novamente a lista de pendências, que agora será filtrada pela nova 'currentTab'.
+                renderPendencias(allPendencias);
+            }
+
+            /**
+             * Renderiza os cards de pendências na tela.
+             * @param {Array} pendencias - A lista completa de pendências.
+             */
+            function renderPendencias(pendencias) {
+                const container = document.getElementById('pendenciasContainer');
+                const emptyState = document.getElementById('emptyState');
+                
+                // Filtra a lista de pendências para mostrar apenas as da aba ativa.
+                const pendenciasTab = pendencias.filter(p => p.consultorio === currentTab);
+                
+                container.innerHTML = ''; // Limpa o conteúdo antigo.
+                if (pendenciasTab.length === 0) {
+                    // Se não houver pendências, mostra a mensagem de estado vazio.
+                    emptyState.classList.remove('hidden');
+                } else {
+                    // Se houver, esconde a mensagem e renderiza os cards.
+                    emptyState.classList.add('hidden');
+                    // Ordena as pendências da mais nova para a mais antiga.
+                    pendenciasTab.sort((a,b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+                    pendenciasTab.forEach(p => container.insertAdjacentHTML('beforeend', createPendencyCardHTML(p)));
+                }
+            }
+
+            /**
+             * Cria o HTML de um único card de pendência.
+             * Usar 'template literals' (crases ``) torna a criação de HTML com variáveis muito mais fácil.
+             * @param {Object} pendencia - O objeto da pendência.
+             * @returns {string} - A string HTML do card.
+             */
+            function createPendencyCardHTML(pendencia) {
+                const dataSaida = pendencia.timestamp ? pendencia.timestamp.toDate() : new Date();
+                const tempoDecorrido = Math.floor((new Date() - dataSaida) / (1000 * 60 * 60)); // Em horas
+                const isUrgent = tempoDecorrido > 4;
+                const prioridadeClass = {
+                    'normal': 'bg-blue-100 text-blue-800', 'alta': 'bg-yellow-100 text-yellow-800', 'urgente': 'bg-red-100 text-red-800'
+                };
+                
+                return `
+                <div class="bg-white rounded-lg shadow-md p-6 card-hover fade-in ${isUrgent ? 'border-l-4 border-red-500' : ''}">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h3 class="text-lg font-semibold text-gray-800">${pendencia.nomePaciente}</h3>
+                                <span class="px-2 py-1 text-xs font-medium rounded-full ${prioridadeClass[pendencia.prioridade] || prioridadeClass.normal}">${pendencia.prioridade.toUpperCase()}</span>
+                                ${isUrgent ? '<span class="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 pulse-warning">URGENTE (>4h)</span>' : ''}
+                            </div>
+                            <div class="flex items-center text-sm text-gray-600 mb-2">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                ${dataSaida.toLocaleString('pt-BR')} - ${pendencia.medicoSaida} (${tempoDecorrido}h)
+                            </div>
+                        </div>
+                        <button onclick="acceptPendency('${pendencia.id}')" class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            Aceitar Demanda
+                        </button>
+                    </div>
+                    <div class="space-y-3">
+                        <div><span class="text-sm font-medium text-gray-700">Motivo:</span><p class="text-gray-600 mt-1">${pendencia.motivoPendencia}</p></div>
+                        <div><span class="text-sm font-medium text-gray-700">Resumo Clínico:</span><p class="text-gray-600 mt-1">${pendencia.resumoClinico}</p></div>
+                    </div>
+                </div>`;
+            }
+
+            /**
+             * Atualiza os números do painel de resumo.
+             */
+            function updateSummary(pendencias, historico) {
+                const totalPendencias = pendencias.length;
+                const totalAceitas = historico.length;
+                let totalUrgentes = 0;
+                let tempoTotal = 0;
+
+                pendencias.forEach(p => {
+                    const dataSaida = p.timestamp ? p.timestamp.toDate() : new Date();
+                    const tempo = Math.floor((new Date() - dataSaida) / (1000 * 60 * 60));
+                    tempoTotal += tempo;
+                    if (tempo > 4) totalUrgentes++;
+                });
+
+                const tempoMedio = totalPendencias > 0 ? Math.round(tempoTotal / totalPendencias) + 'h' : '--';
+
+                // Atualiza tanto a versão desktop quanto a mobile do resumo.
+                ['', 'Mobile'].forEach(sufixo => {
+                    document.getElementById(`totalPendencias${sufixo}`).textContent = totalPendencias;
+                    document.getElementById(`totalAceitas${sufixo}`).textContent = totalAceitas;
+                    document.getElementById(`pendenciasUrgentes${sufixo}`).textContent = totalUrgentes;
+                    document.getElementById(`tempoMedio${sufixo}`).textContent = tempoMedio;
+                });
+                document.getElementById('mobileSummaryText').textContent = `${totalPendencias} ativas • ${totalAceitas} aceitas • ${totalUrgentes} urgentes`;
+            }
+            
+            /**
+             * Alterna a visibilidade do resumo na versão mobile.
+             */
+            function toggleSummaryDropdown() {
+                document.getElementById('summaryDropdown').classList.toggle('hidden');
+                document.getElementById('summaryChevron').classList.toggle('rotate-180');
+            }
+
+            /**
+             * Exibe uma notificação temporária na tela.
+             * @param {string} message - A mensagem a ser exibida.
+             * @param {string} type - O tipo de notificação ('success', 'danger', 'warning', 'info').
+             */
+            function showNotification(message, type) {
+                const container = document.getElementById('alertsContainer');
+                const colors = {
+                    success: 'bg-green-100 border-green-500 text-green-700',
+                    danger: 'bg-red-100 border-red-500 text-red-700',
+                    warning: 'bg-yellow-100 border-yellow-500 text-yellow-700',
+                    info: 'bg-blue-100 border-blue-500 text-blue-700'
+                };
+                const alert = document.createElement('div');
+                alert.className = `border-l-4 p-4 ${colors[type]} mb-4 fade-in`;
+                alert.innerHTML = `<p>${message}</p>`;
+                container.appendChild(alert);
+                // A notificação desaparece após 3 segundos.
+                setTimeout(() => alert.remove(), 3000);
+            }
+            
+            // =================================================================================
+            // PASSO 6: LÓGICA DE EXPORTAÇÃO PARA EXCEL
+            // =================================================================================
+
+            /**
+             * Gera um arquivo .xlsx com base nos dados fornecidos.
+             * @param {Array} pendencias - Dados das pendências a serem exportados.
+             * @param {Array} historico - Dados do histórico a serem exportados.
+             * @param {string} consultorio - Nome do consultório para o nome do arquivo.
+             */
+            async function generateExcelReport(pendencias, historico, consultorio = 'Geral') {
+                if (pendencias.length === 0 && historico.length === 0) {
+                    showNotification("Não há dados para gerar relatório.", "warning");
+                    return;
+                }
+
+                // Mapeia os dados para um formato simples, com cabeçalhos amigáveis.
+                const pendenciasSheet = pendencias.map(p => ({
+                    'Data': p.timestamp ? p.timestamp.toDate().toLocaleString('pt-BR') : '',
+                    'Consultório': p.consultorio,
+                    'Paciente': p.nomePaciente,
+                    'Médico Responsável': p.medicoSaida,
+                    'Motivo': p.motivoPendencia,
+                    'Resumo Clínico': p.resumoClinico,
+                    'Prioridade': p.prioridade
+                }));
+
+                const historicoSheet = historico.map(h => ({
+                    'Data Original': h.timestamp ? h.timestamp.toDate().toLocaleString('pt-BR') : '',
+                    'Médico Original': h.medicoSaida,
+                    'Data de Conclusão': h.dataAceite ? h.dataAceite.toDate().toLocaleString('pt-BR') : '',
+                    'Médico Conclusão': h.medicoAceite,
+                    'Consultório': h.consultorio,
+                    'Paciente': h.nomePaciente,
+                    'Motivo': h.motivoPendencia
+                }));
+
+                // Cria as "planilhas" a partir dos nossos arrays de objetos.
+                const wsPendencias = XLSX.utils.json_to_sheet(pendenciasSheet);
+                const wsHistorico = XLSX.utils.json_to_sheet(historicoSheet);
+
+                // Cria o "livro" (o arquivo .xlsx) e adiciona as planilhas a ele.
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, wsPendencias, "Pendências Ativas");
+                XLSX.utils.book_append_sheet(wb, wsHistorico, "Histórico de Concluídas");
+
+                // Gera o nome do arquivo e força o download no navegador.
+                const fileName = `Relatorio_Passometro_${consultorio.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+            }
+
+            // =================================================================================
+            // PASSO 7: EXPOSIÇÃO DE FUNÇÕES GLOBAIS
+            //
+            // Como nosso código está dentro de uma IIFE, as funções não são acessíveis
+            // globalmente (pelo 'onclick' no HTML, por exemplo).
+            // Para resolver isso, nós as "anexamos" ao objeto 'window', tornando-as globais.
+            // =================================================================================
+            window.logout = logout;
+            window.openNewPendencyModal = () => document.getElementById('newPendencyModal').classList.remove('hidden');
+            window.closeNewPendencyModal = () => document.getElementById('newPendencyModal').classList.add('hidden');
+            window.toggleSummaryDropdown = toggleSummaryDropdown;
+            window.acceptPendency = (id) => {
+                currentPendencyId = id; // Guarda o ID da pendência a ser aceita.
+                document.getElementById('acceptPendencyModal').classList.remove('hidden');
+            };
+            window.closeAcceptPendencyModal = () => document.getElementById('acceptPendencyModal').classList.add('hidden');
+            window.openReportModal = () => {
+                // Preenche o select do modal de relatório com os consultórios.
+                const select = document.getElementById('consultorioSelectExport');
+                select.innerHTML = '';
+                consultorios.forEach(c => {
+                    const option = document.createElement('option');
+                    option.value = c;
+                    option.textContent = c;
+                    select.appendChild(option);
+                });
+                document.getElementById('reportModal').classList.remove('hidden');
+            };
+            window.closeReportModal = () => document.getElementById('reportModal').classList.add('hidden');
+            window.exportConsultorioReport = async () => {
+                const selectedConsultorio = document.getElementById('consultorioSelectExport').value;
+                // Filtra os dados em memória antes de passar para a função de gerar o Excel.
+                const pendenciasFiltradas = allPendencias.filter(p => p.consultorio === selectedConsultorio);
+                const historicoFiltrado = allHistorico.filter(h => h.consultorio === selectedConsultorio);
+                await generateExcelReport(pendenciasFiltradas, historicoFiltrado, selectedConsultorio);
+                closeReportModal();
+            };
+
+        })(); // A IIFE é executada assim que o script é lido.
+    </script>
+</body>
+</html>
